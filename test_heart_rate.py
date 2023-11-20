@@ -112,6 +112,14 @@ def update(frame):
         y1 = min(frame.shape[0], y + h + 10)
         face_mask[y0:y1, x0:x1] = 255
 
+    # 侵蝕操作
+    kernel_erode = np.ones((17, 17), np.uint8)
+    face_mask = cv2.erode(face_mask, kernel_erode, iterations=2)
+
+    # 膨脹操作
+    kernel_dilate = np.ones((1, 1), np.uint8)
+    face_mask = cv2.dilate(face_mask, kernel_dilate, iterations=2)
+
     skin_mask = cv2.bitwise_and(cv2.inRange(hsv_frame, lower_skin, upper_skin), face_mask)
     skin_extracted = cv2.bitwise_and(frame, frame, mask=skin_mask)
 
