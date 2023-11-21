@@ -33,7 +33,7 @@ def extract_face_color(frame, x, y, w, h):
     return mean_color
 
 cap = cv2.VideoCapture(r'Z:\thermal_IRB_after_dataset\Sub_1_front_nomask_1\Sub_1_front_nomask_1_30fps_2023-06-30 19_30_00.avi')
-df = pd.DataFrame(columns=["B", "G", "R"])
+df = pd.DataFrame(columns=["R", "G", "B", "S1", "S2"])
 
 fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(10, 6))
 
@@ -54,10 +54,22 @@ def update(frame):
         y1 = min(frame.shape[0], y + h + 10)
 
         face_color = extract_face_color(frame, x0, y0, x1 - x0, y1 - y0)
-        print("Face Color (BGR):", face_color)
+        print("Face Color (RGB):", face_color)
 
-        b, g, r = face_color
-        df = pd.concat([df, pd.DataFrame({"B": [b], "G": [g], "R": [r]})], ignore_index=True)
+        r, g, b = face_color
+        df = pd.concat([df, pd.DataFrame({"R": [r], "G": [g], "B": [b]})], ignore_index=True)
+
+        # Apply matrix operation on the RGB channels
+        matrix_operation_result = np.array([
+            [0, 1, -1],
+            [-2, 1, 1]
+        ]).dot([r, g, b])
+
+        print("Matrix Operation Result:", matrix_operation_result)
+
+        # Append the results to the DataFrame
+        df.loc[df.index[-1], 'S1'] = matrix_operation_result[0]
+        df.loc[df.index[-1], 'S2'] = matrix_operation_result[1]
 
         # 在視訊畫面上畫框框
         cv2.rectangle(frame, (x0, y0), (x1, y1), (0, 255, 0), 2)
@@ -68,28 +80,28 @@ def update(frame):
     ax3.clear()
 
     # 提取颜色通道数据
-    B = df["B"]
-    G = df["G"]
     R = df["R"]
+    G = df["G"]
+    B = df["B"]
 
     # 创建时间序列（假设每一帧的时间间隔为1秒）
     time_series = range(len(B))
 
     # 繪製B、G、R颜色通道的直方圖
-    ax1.plot(time_series, B, label="Blue", color="blue")
-    ax1.set_title("Blue Channel")
+    ax1.plot(time_series, R, label="Red", color="red")
+    ax1.set_title("Red Channel")
 
     ax2.plot(time_series, G, label="Green", color="green")
     ax2.set_title("Green Channel")
 
-    ax3.plot(time_series, R, label="Red", color="red")
-    ax3.set_title("Red Channel")
+    ax3.plot(time_series, R, label="Blue", color="blue")
+    ax3.set_title("Blue Channel")
 
     # 添加標籤和標題
-    ax1.set_ylabel("Blue Color Value")
+    ax1.set_ylabel("Red Color Value")
     ax2.set_ylabel("Green Color Value")
     ax3.set_xlabel("Time (frames)")
-    ax3.set_ylabel("Red Color Value")
+    ax3.set_ylabel("Blue Color Value")
 
     # 添加圖例
     ax1.legend()
