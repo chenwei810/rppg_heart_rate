@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
+from scipy.signal import firwin, lfilter
 
 # 讀取模型配置和權重
 prototxt_rgb = r".\model\rgb.prototxt"
@@ -36,7 +36,7 @@ def extract_face_color(frame, x, y, w, h):
 # 讀取視訊檔案
 cap = cv2.VideoCapture(r'Z:\thermal_IRB_after_dataset\Sub_1_front_nomask_1\Sub_1_front_nomask_1_30fps_2023-06-30 19_30_00.avi')
 # 創建 DataFrame 以存儲顏色和相關數據
-df = pd.DataFrame(columns=["R", "G", "B", "S1", "S2", "Std_S1", "Std_S2", "PR_raw"])
+df = pd.DataFrame(columns=["R", "G", "B", "S1", "S2", "Std_S1", "Std_S2", "PR_raw", "PR_normalized"])
 
 # 初始化 frame 計數器、S1 和 S2 的 buffer 以及 buffer 大小
 frame_count = 0  # 初始化 frame 計數器
@@ -44,7 +44,6 @@ s1_buffer = []  # 保存 S1 的 buffer
 s2_buffer = []  # 保存 S2 的 buffer
 buffer_size = 90  # buffer 大小
 pr_raw_values = []  # 保存 PR_raw 的 buffer
-
 
 while True:
     ret, frame = cap.read()
@@ -67,7 +66,7 @@ while True:
 
         r, g, b = face_color
         # 將顏色數據添加到 DataFrame
-        df = pd.concat([df, pd.DataFrame({"R": [r], "G": [g], "B": [b], "S1": [r], "S2": [g]})], ignore_index=True)
+        df = pd.concat([df, pd.DataFrame({"R": [r], "G": [g], "B": [b], "S1": [r], "S2": [g], "PR_raw": [0], "PR_normalized": [0]})], ignore_index=True)
 
         # 對 RGB 通道應用矩陣運算，POS演算
         matrix_operation_result = np.array([
@@ -81,12 +80,17 @@ while True:
         s1_buffer.append(matrix_operation_result[0])
         s2_buffer.append(matrix_operation_result[1])
 
+        # 檢查緩衝區是否超過指定的大小
+        if len(s1_buffer) > buffer_size:
+            # 移除最早加入的frame
+            s1_buffer.pop(0)
+            s2_buffer.pop(0)
+
         # 將結果添加到 DataFrame
         df.loc[df.index[-1], 'S1'] = matrix_operation_result[0]
         df.loc[df.index[-1], 'S2'] = matrix_operation_result[1]
 
         # 每十個 frame 計算一次 std_s1 和 std_s2
-        # if frame_count % buffer_size == 0 and frame_count > 0:
         if frame_count > 90 :
             std_s1 = np.std(s1_buffer)
             std_s2 = np.std(s2_buffer)
@@ -98,15 +102,20 @@ while True:
 
             # 計算 PR_raw
             PR_raw = std_s1 + (alpha * std_s2)
+            pr_raw_values.append(PR_raw)
+
+            # 計算 PR_raw 平均值
+            PR_mean = np.mean(pr_raw_values)
+            # 計算 PR_raw 標準差
+            PR_std = np.std(pr_raw_values)
+            # 計算 PR_normalized
+            PR_normalized = (PR_raw-PR_mean)/PR_std
 
             # Append the results to the DataFrame
             df.loc[df.index[-1], 'Std_S1'] = std_s1
             df.loc[df.index[-1], 'Std_S2'] = std_s2
             df.loc[df.index[-1], 'PR_raw'] = PR_raw
-
-            # # 重置 buffer
-            # s1_buffer = []
-            # s2_buffer = []
+            df.loc[df.index[-1], 'PR_normalized'] = PR_normalized
 
         # 在視訊畫面上畫框框
         cv2.rectangle(frame, (x0, y0), (x1, y1), (0, 255, 0), 2)
@@ -146,6 +155,22 @@ while True:
     if key == ord("q"):
         break
 
+# 針對 PR_normalized 資料應用 30 階 FIR 濾波器
+order = 30  # 濾波器階數
+nyquist = 0.5 * 30  # Nyquist 頻率，這裡假設取樣頻率為 30 Hz
+cutoff = [0.8 / nyquist, 3.4 / nyquist]  # 截至頻率，轉換為正規化頻率
+
+# 計算 FIR 濾波器係數
+coefficients = firwin(order, cutoff, pass_zero=False)
+
+# 應用 FIR 濾波器到 PR_normalized 資料
+pr_normalized_filtered = lfilter(coefficients, 1.0, df["PR_normalized"])
+
+# 將處理完的訊號用 PR_filtered 表示
+df["PR_filtered"] = pr_normalized_filtered
+
+# 輸出處理後的 DataFrame 至 CSV 檔案
+df.to_csv("face_color_signals_filtered.csv", index=False)
+
 cap.release()
 cv2.destroyAllWindows()
-df.to_csv("face_color_signals_test_rr.csv", index=False)

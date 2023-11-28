@@ -98,6 +98,6 @@ def main():
 
     cap.release()
     cv2.destroyAllWindows()
-    df.to_csv("test2.csv", index=False)
+    df.to_csv("test.csv", index=False)
 
 main()

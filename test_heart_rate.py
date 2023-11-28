@@ -81,12 +81,17 @@ while True:
         s1_buffer.append(matrix_operation_result[0])
         s2_buffer.append(matrix_operation_result[1])
 
+        # 檢查緩衝區是否超過指定的大小
+        if len(s1_buffer) > buffer_size:
+            # 移除最早加入的frame
+            s1_buffer.pop(0)
+            s2_buffer.pop(0)
+
         # 將結果添加到 DataFrame
         df.loc[df.index[-1], 'S1'] = matrix_operation_result[0]
         df.loc[df.index[-1], 'S2'] = matrix_operation_result[1]
 
-        # 每十個 frame 計算一次 std_s1 和 std_s2
-        # if frame_count % buffer_size == 0 and frame_count > 0:
+        # 每90個 frame 計算一次 std_s1 和 std_s2
         if frame_count > 90 :
             std_s1 = np.std(s1_buffer)
             std_s2 = np.std(s2_buffer)
@@ -98,15 +103,21 @@ while True:
 
             # 計算 PR_raw
             PR_raw = std_s1 + (alpha * std_s2)
+            pr_raw_values.append(PR_raw)
+
+            # 計算 PR_raw 平均值
+            PR_mean = np.mean(pr_raw_values)
+            # 計算 PR_raw 標準差
+            PR_std = np.std(pr_raw_values)
+            # 計算 PR_normalized
+            PR_normalized = (PR_raw-PR_mean)/PR_std
 
             # Append the results to the DataFrame
             df.loc[df.index[-1], 'Std_S1'] = std_s1
             df.loc[df.index[-1], 'Std_S2'] = std_s2
             df.loc[df.index[-1], 'PR_raw'] = PR_raw
+            df.loc[df.index[-1], 'PR_normalized'] = PR_normalized
 
-            # # 重置 buffer
-            # s1_buffer = []
-            # s2_buffer = []
 
         # 在視訊畫面上畫框框
         cv2.rectangle(frame, (x0, y0), (x1, y1), (0, 255, 0), 2)
@@ -148,4 +159,4 @@ while True:
 
 cap.release()
 cv2.destroyAllWindows()
-df.to_csv("face_color_signals_test_rr.csv", index=False)
+df.to_csv("face_color_signals_test_nor.csv", index=False)
