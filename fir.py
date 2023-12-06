@@ -4,7 +4,7 @@ from scipy.signal import firwin, lfilter, find_peaks
 import matplotlib.pyplot as plt
 
 # 讀取 CSV 文件
-df = pd.read_csv("face_color_signals_filtered2.csv")
+df = pd.read_csv("face_color_signals_filtered.csv")
 
 pr_raw = df["PR_raw"]
 
@@ -12,7 +12,7 @@ pr_raw = df["PR_raw"]
 pr_normalized = df["PR_normalized"]
 
 # 設計 30 階 FIR 濾波器的係數
-order = 4
+order = 60
 nyquist = 0.5 * 30  # Nyquist 頻率，這裡假設取樣頻率為 30 Hz
 cutoff = [1 / nyquist, 1.67 / nyquist]  # 截至頻率，轉換為正規化頻率
 
@@ -34,8 +34,8 @@ peaks, _ = find_peaks(pr_filtered, height=0.2)
 # 繪製 PR_normalized 和 PR_filtered 曲線
 plt.plot(peaks, pr_filtered[peaks], "x", label="Peaks", color="red")
 # plt.plot(pr_raw, label="PR_raw")
-plt.plot(pr_normalized, label="PR_normalized")
-# plt.plot(pr_filtered, label="PR_filtered")
+# plt.plot(pr_normalized, label="PR_normalized")
+plt.plot(pr_filtered, label="PR_filtered")
 plt.title("PR_normalized and PR_filtered with FIR Filter")
 plt.xlabel("Frame")
 plt.ylabel("Value")

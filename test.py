@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 import pandas as pd
-from scipy.signal import firwin, lfilter
+from scipy.signal import firwin, lfilter, butter
 
 # 讀取模型配置和權重
 prototxt_rgb = r".\model\rgb.prototxt"
@@ -100,6 +100,8 @@ while True:
             # 計算 S1 標準差除以 S2 標準差的結果
             alpha = std_s1 / std_s2
 
+            if len(pr_raw_values) > buffer_size:
+                pr_raw_values.pop(0)
             # 計算 PR_raw
             PR_raw = std_s1 + (alpha * std_s2)
             pr_raw_values.append(PR_raw)
@@ -115,6 +117,8 @@ while True:
             df.loc[df.index[-1], 'Std_S1'] = std_s1
             df.loc[df.index[-1], 'Std_S2'] = std_s2
             df.loc[df.index[-1], 'PR_raw'] = PR_raw
+            df.loc[df.index[-1], 'PR_mean'] = PR_mean
+            df.loc[df.index[-1], 'PR_std'] = PR_std
             df.loc[df.index[-1], 'PR_normalized'] = PR_normalized
 
         # 在視訊畫面上畫框框
@@ -157,8 +161,8 @@ while True:
 
 # 針對 PR_normalized 資料應用 30 階 FIR 濾波器
 order = 30  # 濾波器階數
-nyquist = 0.5 * 30  # Nyquist 頻率，這裡假設取樣頻率為 30 Hz
-cutoff = [0.8 / nyquist, 3.4 / nyquist]  # 截至頻率，轉換為正規化頻率
+nyquist = 1.0 * 30  # Nyquist 頻率，這裡假設取樣頻率為 30 Hz
+cutoff = [1 / nyquist, 1.67 / nyquist]  # 截至頻率，轉換為正規化頻率
 
 # 計算 FIR 濾波器係數
 coefficients = firwin(order, cutoff, pass_zero=False)
@@ -170,7 +174,31 @@ pr_normalized_filtered = lfilter(coefficients, 1.0, df["PR_normalized"])
 df["PR_filtered"] = pr_normalized_filtered
 
 # 輸出處理後的 DataFrame 至 CSV 檔案
-df.to_csv("face_color_signals_filtered.csv", index=False)
+df.to_csv("face_color_signals_normalized.csv", index=False)
+
+# # 在應用 Butterworth 帶通濾波器時，設置帶通濾波器的下截止頻率和上截止頻率
+# order = 4  # 濾波器階數
+# fs = 30.0  # 取樣頻率，假設每秒30幀
+# lowcut = 1.0  # 帶通濾波器的下截止頻率
+# highcut = 1.67  # 帶通濾波器的上截止頻率
+
+# # 計算 Butterworth 帶通濾波器係數
+# nyquist = 0.5 * fs
+# low = lowcut / nyquist
+# high = highcut / nyquist
+# b, a = butter(N=order, Wn=[low, high], btype='band')
+
+# # ...（之後的代碼）...
+
+# print("Before filtering:", df.head())
+# # 應用 Butterworth 帶通濾波器到 PR_normalized 資料
+# pr_normalized_filtered = lfilter(b, a, df["PR_normalized"])
+# # 將處理完的訊號用 PR_filtered 表示
+# df["PR_filtered"] = pr_normalized_filtered
+# print("After filtering:", df.head())
+
+# 輸出處理後的 DataFrame 至 CSV 檔案
+df.to_csv("face_color_signals_normalizedss.csv", index=False)
 
 cap.release()
 cv2.destroyAllWindows()
