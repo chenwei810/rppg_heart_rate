@@ -1,7 +1,8 @@
 import cv2
 import numpy as np
 import pandas as pd
-from scipy.signal import firwin, lfilter, butter
+from scipy.signal import firwin, lfilter, find_peaks
+import matplotlib.pyplot as plt
 
 # 讀取模型配置和權重
 prototxt_rgb = r".\model\rgb.prototxt"
@@ -62,7 +63,7 @@ while True:
         y1 = min(frame.shape[0], y + h + 10)
 
         face_color = extract_face_color(frame, x0, y0, x1 - x0, y1 - y0)
-        print("Face Color (RGB):", face_color)
+        # print("Face Color (RGB):", face_color)
 
         r, g, b = face_color
         # 將顏色數據添加到 DataFrame
@@ -74,7 +75,7 @@ while True:
             [-2, 1, 1]
         ]).dot([r, g, b])
 
-        print("Matrix Operation Result:", matrix_operation_result)
+        # print("Matrix Operation Result:", matrix_operation_result)
 
         # 將 S1 和 S2 加入 buffer
         s1_buffer.append(matrix_operation_result[0])
@@ -90,12 +91,12 @@ while True:
         df.loc[df.index[-1], 'S1'] = matrix_operation_result[0]
         df.loc[df.index[-1], 'S2'] = matrix_operation_result[1]
 
-        # 每十個 frame 計算一次 std_s1 和 std_s2
-        if frame_count > 90 :
+        # 每90個 frame 計算一次 std_s1 和 std_s2
+        if frame_count > 90:
             std_s1 = np.std(s1_buffer)
             std_s2 = np.std(s2_buffer)
-            print(f"Standard Deviation of S1 (Frame {frame_count}): {std_s1}")
-            print(f"Standard Deviation of S2 (Frame {frame_count}): {std_s2}")
+            # print(f"Standard Deviation of S1 (Frame {frame_count}): {std_s1}")
+            # print(f"Standard Deviation of S2 (Frame {frame_count}): {std_s2}")
 
             # 計算 S1 標準差除以 S2 標準差的結果
             alpha = std_s1 / std_s2
@@ -111,7 +112,11 @@ while True:
             # 計算 PR_raw 標準差
             PR_std = np.std(pr_raw_values)
             # 計算 PR_normalized
-            PR_normalized = (PR_raw-PR_mean)/PR_std
+            if PR_std != 0:
+                PR_normalized = (PR_raw - PR_mean) / PR_std
+            else:
+                # 如果 PR_std 為零，請根據您的需求設置一個預設值，這裡設置為零
+                PR_normalized = 0
 
             # Append the results to the DataFrame
             df.loc[df.index[-1], 'Std_S1'] = std_s1
@@ -125,6 +130,7 @@ while True:
         cv2.rectangle(frame, (x0, y0), (x1, y1), (0, 255, 0), 2)
 
         frame_count += 1  # 每次 frame 更新計數器
+        print(frame_count)
 
     # 提取膚色區域
     lower_skin = np.array([0, 20, 70], dtype="uint8")
@@ -159,46 +165,50 @@ while True:
     if key == ord("q"):
         break
 
-# 針對 PR_normalized 資料應用 30 階 FIR 濾波器
-order = 30  # 濾波器階數
-nyquist = 1.0 * 30  # Nyquist 頻率，這裡假設取樣頻率為 30 Hz
+# 輸出處理後的 DataFrame 至 CSV 檔案
+df.to_csv("test_with_fir.csv", index=False)
+
+cap.release()
+cv2.destroyAllWindows()
+
+# 讀取 CSV 文件
+df = pd.read_csv("face_color_signals_normalized.csv")
+
+pr_raw = df["PR_raw"]
+
+# 取出 PR_normalized 資料
+pr_normalized = df["PR_normalized"]
+
+# 設計 80 階 FIR 濾波器的係數
+order = 80
+nyquist = 0.5 * 30  # Nyquist 頻率，這裡假設取樣頻率為 30 Hz
 cutoff = [1 / nyquist, 1.67 / nyquist]  # 截至頻率，轉換為正規化頻率
 
 # 計算 FIR 濾波器係數
 coefficients = firwin(order, cutoff, pass_zero=False)
 
 # 應用 FIR 濾波器到 PR_normalized 資料
-pr_normalized_filtered = lfilter(coefficients, 1.0, df["PR_normalized"])
+pr_filtered = lfilter(coefficients, 1.0, pr_normalized)
 
 # 將處理完的訊號用 PR_filtered 表示
-df["PR_filtered"] = pr_normalized_filtered
+df["PR_filtered"] = pr_filtered
 
-# 輸出處理後的 DataFrame 至 CSV 檔案
+# 將更新後的 DataFrame 寫回 CSV 檔案
 df.to_csv("face_color_signals_normalized.csv", index=False)
 
-# # 在應用 Butterworth 帶通濾波器時，設置帶通濾波器的下截止頻率和上截止頻率
-# order = 4  # 濾波器階數
-# fs = 30.0  # 取樣頻率，假設每秒30幀
-# lowcut = 1.0  # 帶通濾波器的下截止頻率
-# highcut = 1.67  # 帶通濾波器的上截止頻率
+# 找到 PR_filtered 曲線上的峰值
+peaks, _ = find_peaks(pr_filtered, height=0)
+# 計算峰值的總和
+peaks_sum = len(peaks)
 
-# # 計算 Butterworth 帶通濾波器係數
-# nyquist = 0.5 * fs
-# low = lowcut / nyquist
-# high = highcut / nyquist
-# b, a = butter(N=order, Wn=[low, high], btype='band')
-
-# # ...（之後的代碼）...
-
-# print("Before filtering:", df.head())
-# # 應用 Butterworth 帶通濾波器到 PR_normalized 資料
-# pr_normalized_filtered = lfilter(b, a, df["PR_normalized"])
-# # 將處理完的訊號用 PR_filtered 表示
-# df["PR_filtered"] = pr_normalized_filtered
-# print("After filtering:", df.head())
-
-# 輸出處理後的 DataFrame 至 CSV 檔案
-df.to_csv("face_color_signals_normalizedss.csv", index=False)
-
-cap.release()
-cv2.destroyAllWindows()
+# 繪製 PR_normalized 和 PR_filtered 曲線
+plt.plot(peaks, pr_filtered[peaks], "x", label="Peaks", color="red")
+# plt.plot(pr_raw, label="PR_raw")
+# plt.plot(pr_normalized, label="PR_normalized")
+plt.plot(pr_filtered, label="PR_filtered")
+plt.title("PR_normalized and PR_filtered with FIR Filter")
+plt.xlabel("Frame")
+plt.ylabel("Value")
+plt.legend()
+print(peaks_sum)
+plt.show()
